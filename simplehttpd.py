@@ -11,6 +11,7 @@ import select
 import urllib
 import urllib2
 import urlparse
+import multiprocessing
 
 try:
     from cStringIO import StringIO
@@ -23,6 +24,9 @@ import SocketServer
 PORT = 8080
 
 class MyTCPServer(SocketServer.ForkingTCPServer):
+    manager = multiprocessing.Manager()
+    CACHE = manager.dict()
+
     def server_bind(self):
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         SocketServer.ForkingTCPServer.server_bind(self)
@@ -30,16 +34,46 @@ class MyTCPServer(SocketServer.ForkingTCPServer):
 class AJAXRequestHandler(CGIHTTPServer.CGIHTTPRequestHandler):
 
     cgi_directories = [""]
+    exposed_methods = []
 
     def __init__(self, *kwds, **args):
         CGIHTTPServer.CGIHTTPRequestHandler.__init__(self, *kwds, **args)
 
-    def _do_GET(self):
-        print "GET!"
-        print self.path
+    def do_GET(self):
+        (scm, netloc, path, params, query, fragment) = urlparse.urlparse(
+            self.path, 'http')
 
-        ctype = self.guess_type(self.path)
-        print "Guessed:", ctype
+        query_dict = {}
+        if query: 
+            query_dict = dict(qc.split("=") for qc in query.split("&"))
+            print query_dict
+
+        ctype = self.guess_type(path)
+
+        ret = ""
+        mname = path.lstrip('/')
+        if mname not in self.exposed_methods:
+            #print "Not an exposed method: ", mname
+            #self.send_response(404)
+            #self.end_headers()
+            #return
+            CGIHTTPServer.CGIHTTPRequestHandler.do_GET(self)
+            return 
+
+        if hasattr(self, mname):
+            print "I has that attr"
+            self.send_response(200)
+            #self.send_header("Content-type", "text/html")
+            method = getattr(self, mname)
+            ret = method(query_dict)
+        
+        print "Content length: ", len(ret)   
+            
+        self.send_header("Content-Length", str(len(ret)))
+        self.end_headers()
+        self.wfile.write(ret) 
+        print "Done with do_GET"
+        return True
 
     def test(self, *args):
         print "TEST:", args

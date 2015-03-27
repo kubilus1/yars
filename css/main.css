@@ -1,0 +1,48 @@
+body {background-color:lightblue}
+h1   {color:blue}
+p {
+    display: block;
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+.diff {
+    margin-left: 11ch;
+    max-width: 80ch;
+    /*white-space: normal;*/
+}
+
+pre {/*
+    display: inline-block;
+    white-space: normal;
+    width: 91ch;
+    */
+    max-width: 101ch;
+    word-wrap: break-word;
+}
+
+code {
+    /*
+    max-width: 101ch;
+    white-space: normal;
+    */
+}
+
+.all_diffs {
+    display: inline-block;
+}
+
+.linenum {
+    float: left;
+    width: 11ch;
+}
+
+.addline {
+    background-color:#88FF88;
+}
+
+.subline {
+    background-color:#FF8888;
+}

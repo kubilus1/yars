@@ -1,82 +1,104 @@
 import os
 import sys
+import json
+import shelve
 import urllib2
 import urlparse
+import cStringIO
 import subprocess
 
 import simplehttpd
 
 PORT = 8080
 
+RTCCMD = os.path.expanduser("~/jazz/scmtools/eclipse/lscm")
+RTCURI="https://rtp-rtc6.tivlab.raleigh.ibm.com:9443/jazz/"
+
+HTML_HEADER="""<html>
+<head>
+<link rel="stylesheet" type="text/css" href="css/main.css">
+</head>
+<body>
+<div class="all_diffs">
+"""
+
+HTML_FOOTER="</div></body></html>"
+
+DB="yars.db"
+
+
 class MyRequestHandler(simplehttpd.AJAXRequestHandler):
-    def do_GET(self):
-        print "DO_GET"
-        (scm, netloc, path, params, query, fragment) = urlparse.urlparse(
-            self.path, 'http')
-        print "scm:", scm
-        print "netloc:", netloc
-        print "path:", path
-        print "params:", params
-        print "query:", query
-        print "fragment:", fragment
-        print "Command:", self.command
-        #u = urlparse.urlunparse((scm, "www.titantv.com", path, params, query, fragment))
-        #print "URL:", u
-        query_dict = dict(qc.split("=") for qc in query.split("&"))
-        print query_dict
+    exposed_methods = ["do_review", "rtc_review"]
 
-        ctype = self.guess_type(path)
-        print "Guessed:", ctype
-        #f = self.send_head(u)
+    def get_rtc_changeset(self, uuid):
+        outdata = ""
+        print "Getting diff for %s" % uuid
+        command = [RTCCMD, 'diff', 'changeset', uuid, '-r', RTCURI]
+        p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=False)
+        return p.communicate()[0]
 
 
-        #self.send_response(200)
-        #self.send_header("Content-type", ctype)
-        #self.end_headers()
-
-        #f = urllib2.urlopen(u)
-        #if f:
-        #    self.copyfile(f, self.wfile)
-        #    f.close()
-
-        ret = False
-        mname = path.lstrip('/')
-        if hasattr(self, mname):
-            method = getattr(self, mname)
-            ret = method(query_dict)
-
-        if ret:
-            self.send_response(200)
-        else:
-            self.send_response(404)
-
-        self.end_headers()
-        self.wfile.write(ret) 
-
-
-    def do_review(self, *args, **kwds):
+    def rtc_review(self, *args, **kwds):
         print args
         print kwds
-
         if args:
             arg_dict = args[0]
 
+        outdata = ""
+
+        workitem = arg_dict.get('workitem')
+        
+        command = [RTCCMD, 'list', 'changesets', '-W', workitem, '-j', '-r', RTCURI]
+        p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=False)
+        changesets_raw = p.communicate()[0].strip()
+       
+        try:
+            changesets = json.loads(changesets_raw)
+        except ValueError:
+            return "<html><body>" + changesets_raw + "</body></html>"
+        
+        print "Got workitem changesets.  Getting diffs..."
+
+        uuids = []
+        for cset in changesets['workitems'][0]['changesets']:
+            if cset.get('state').get('complete') == True:
+                uuids.append(cset['uuid'])
+            else:
+                print "UUID: %d is not complete, skipping" % uuid
+
+        shelf = shelve.open(DB)
+
+        try:
+            for uuid in uuids:
+                print "Getting diff for %s" % uuid
+            
+                #cache_data = self.server.CACHE.get(uuid)
+                cache_data = shelf.get(str(uuid))
+                if cache_data:
+                    print "Cache hit for: ", uuid
+                    cs = cStringIO.StringIO(cache_data)
+                    outdata += self.render_diff(cs)
+                    cs.close()
+                else:
+                    print "Cache miss for: ", uuid
+                    diffdata = self.get_rtc_changeset(uuid)
+                    
+                    cs = cStringIO.StringIO(diffdata)
+                    outdata += self.render_diff(cs)
+                    cs.close()
+                    
+                    shelf[str(uuid)] = diffdata
+                    outdata += diffdata
+        finally:
+            shelf.close()
+
+        print "Done with rtc_review" 
+        
+        return HTML_HEADER + outdata + HTML_FOOTER
+
+
+    def render_diff(self, diff_handle, id=None):
         outdata = """
-        <html>
-        <head>
-        <style>
-          body {background-color:lightblue}
-          h1   {color:blue}
-          p {
-                display: block;
-                margin-top: 0;
-                margin-bottom: 0;
-                margin-left: 0;
-                margin-right: 0;
-            }
-        </style>
-        </head>
-        <body>
         <code>
         <pre>
         """
@@ -84,56 +106,67 @@ class MyRequestHandler(simplehttpd.AJAXRequestHandler):
         color = False
         old_num = 0
         new_num = 0
-
-        with open('patch.diff', 'r') as h:
             
-            for line in h.readlines():
+        for line in diff_handle.readlines():
+            
+            if line.startswith("Index") or line.startswith("diff"):
+                color = False
+                old_num = 0
+                new_num = 0
+            elif line.startswith("@@"):
+                print line
+                splits = line.split()
+                old_num = abs(int(splits[1].split(',')[0]))
+                new_num = abs(int(splits[2].split(',')[0]))
+            elif line.startswith('+'):
+                line =  line[1:]
+                outdata += "<p>"
+                outdata += "<div class='linenum'>"
+                outdata += "     %04d " % (new_num)
+                outdata += "</div>"
+                outdata += "<div class='addline'>"
+                color = True
+                new_num += 1
+            elif line.startswith('-'):
+                line =  line[1:]
+                outdata += "<p>"
+                outdata += "<div class='linenum'>"
+                outdata += "%04d      " % (old_num)
+                outdata += "</div>"
+                outdata += "<div class='subline'>"
+                color = True
+                old_num += 1
+            elif old_num == new_num:
+                outdata += "<div class='linenum'>"
+                outdata += "%04d      " % (new_num)
+                outdata += "</div>"
+                old_num += 1
+                new_num += 1
+            else:
+                outdata += "<div class='linenum'>"
+                outdata += "%04d %04d " % (old_num, new_num)
+                outdata += "</div>"
+                old_num += 1
+                new_num += 1
 
-                
-                if line.startswith("Index"):
-                    color = False
-                    old_num = 0
-                    new_num = 0
-                elif line.startswith("@@"):
-                    print line
-                    splits = line.split()
-                    old_num = abs(int(splits[1].split(',')[0]))
-                    new_num = abs(int(splits[2].split(',')[0]))
-                elif line.startswith('+'):
-                    outdata += "<p style='background-color:#88FF88'>"
-                    outdata += "     %04d " % (new_num)
-                    color = True
-                    new_num += 1
-                elif line.startswith('-'):
-                    outdata += "<p style='background-color:#FF8888'>"
-                    outdata += "%04d      " % (old_num)
-                    color = True
-                    old_num += 1
-                elif old_num == new_num:
-                    outdata += "%04d      " % (new_num)
-                    old_num += 1
-                    new_num += 1
-                else:
-                    outdata += "%04d %04d " % (old_num, new_num)
-                    old_num += 1
-                    new_num += 1
+            outdata += '<div class="diff">'
+            outdata += "%s" % (
+                    line.replace('<','&lt;').replace('>','&gt;')
+            )
+            outdata += '</div>'
 
-                outdata += "%s" % (
-                        line.replace('<','&lt;').replace('>','&gt;')
-                )
-
-                if color:
-                    outdata += "</p>"
-                    color = False
+            if color:
+                outdata += "</p>"
+                outdata += "</div>"
+                color = False
 
         outdata += """
         </pre>
         </code>
-        </body>
-        </html>
         """
     
         return outdata
+
 
 if __name__ == "__main__":
     argc = len(sys.argv)
@@ -144,6 +177,7 @@ if __name__ == "__main__":
         PORT = int(sys.argv[2])
 
     print "Running from %s" % os.getcwd()
+
 
     name = ""
     handler = MyRequestHandler
