@@ -17,6 +17,9 @@ RTCURI="https://rtp-rtc6.tivlab.raleigh.ibm.com:9443/jazz/"
 HTML_HEADER="""<html>
 <head>
 <link rel="stylesheet" type="text/css" href="css/main.css">
+<script type="text/javascript" src="js/jquery.js"></script> 
+<script type="text/javascript" src="js/ajax_stuff.js"></script>
+<script type="text/javascript" src="js/yars.js"></script>
 </head>
 <body>
 <div class="all_diffs">
