@@ -8,19 +8,14 @@ p {
     margin-right: 0;
 }
 
-.diff {
-    margin-left: 11ch;
-    max-width: 80ch;
-    /*white-space: normal;*/
-}
-
 pre {/*
     display: inline-block;
     white-space: normal;
     width: 91ch;
     */
-    max-width: 101ch;
+    max-width: 151ch;
     word-wrap: break-word;
+    margin-left: 5%; 
 }
 
 code {
@@ -30,6 +25,19 @@ code {
     */
 }
 
+a {
+    text-decoration: none;
+}
+
+.diff {
+    /*
+    float: left;
+    */
+    max-width: 80ch;
+    margin-left: 32ch;
+    /*white-space: normal;*/
+}
+
 .all_diffs {
     display: inline-block;
 }
@@ -37,6 +45,28 @@ code {
 .linenum {
     float: left;
     width: 11ch;
+    margin-left: 21ch;
+    /*margin-left: 50ch;*/
+}
+
+.comment {/*
+    height: 0;
+    font-family: Courier;
+    text-decoration: none;
+    display: none;
+    */
+    width: 20ch;
+    height: 0ch;
+    visibility: hidden;
+    text-decoration: none;
+    font-family: monospace;
+    foreground-color:#444444;
+    margin-top: -1ch;
+    margin-bottom: 0;
+    margin-left: 10px;
+    margin-right: 0;
+    z-index: 2;
+    position: absolute;
 }
 
 .addline {
@@ -45,4 +75,19 @@ code {
 
 .subline {
     background-color:#FF8888;
+}
+
+.changeset_header {
+    margin: 1px;
+    color: #fff;
+    padding: 3px 10px;
+    cursor: pointer;
+    position: relative;
+    background-color:#c30;
+    width: 151ch;
+}
+
+.changeset {
+    padding: 5px 10px;
+    background-color:#fafafa;
 }
